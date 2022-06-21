@@ -1,0 +1,195 @@
+*get x3(功能完成，写完)12月16日 \
+*post 1 2 3(12/20尝试中,12/22完成)基本功能完成 \
+12月23日之后\
+优化withdrawal address \
+1,回传特定值 \
+2,status 400,回传信息 \
+优化 transfer \
+1,合并 rigister received transfer & check Alerts \
+2,添加 延时 ，顺序->：rigister transfer ->0.5s->check alerts\
+3,return特定值
+
+
+
+### 一,注册提款地址
+#### 提供 ：
+>用户名 User Id\
+币种 coin \
+提款目标地址 output_address
+####查询该地址风险等级：
+>low\
+medium\
+high\
+severe\
+other：unknow
+
+
+### Register Withdrawal address  注册提款地址，查询风险等级
+#### (post_v1_withaddr.go)
+#### KYT api key
+> 8e283fdd013173ce7712d8e5ae9e9d21655274956bddbb40388a4a9229b135a5. 
+
+> curl 指令: POST
+#####注册提款地址
+>curl -X POST 'https://api.chainalysis.com/api/kyt/v1/users/{user id}/withdrawaladdresses' \
+  --header 'Token: <API_KEY>' \
+ // --header 'Accept: application/json' \
+ // --header 'Content-Type: application/json' \
+  --data '[{"asset": "<coin>", "address": "<output_address>"}]'
+
+回传：有资料回传,无资料:各栏位回传：null [] \
+回传：交易类别，风险等级
+>回传范例1\
+{
+[{"asset":"BTC","address":"11125hJDZwkNda8qDWmiuw67NDLCnte7Xq",
+"cluster":{"name":"Hydra Marketplace","category":"darknet market"},"rating":"highRisk",
+"customAddress":null,"chainalysisIdentification":null}]%
+ }\
+> 回传范例2\
+{[{"asset":"BTC","address":"3KQKDvLfFZESueHV97jZjzgPxnB35m1nxa",\ 
+"cluster":{"name":"Hoo.com","category":"exchange"},\
+"rating":"lowRisk","customAddress":null,"chainalysisIdentification":null}]%
+}\
+>\
+> 回传1
+>[{"asset":"BTC","address":"31h1yc8MnKj49By5tSjApsaLUnEeJ1g4u4","cluster":{"name":"DarkMarket","category":"darknet market"},"rating":"highRisk","customAddress":null,"chainalysisIdentification":null}]
+>\
+> 回传2
+> [{"asset":"BTC","address":"3EKTUgb7rvfFctsAw9EXLsmaUUcsZ2Wzr3","cluster":null,"rating":"unknown","customAddress":null,"chainalysisIdentification":null}]
+>\
+
+回传json转struct 
+> type ResultData []struct {\
+Asset                     string      `json:"asset"`\
+Address                   string      `json:"address"`\
+Cluster                   interface{} `json:"cluster"`\
+Rating                    string      `json:"rating"`\
+CustomAddress             interface{} `json:"customAddress"`\
+ChainalysisIdentification interface{} `json:"chainalysisIdentification"`
+} 
+> 
+### 二, Register Transfer Recevied 注册收到转账
+
+> 提供 user Id\
+ 提供 transaction_hash, outputaddress(转过来的地址/)\
+ 注册收到的转账 ➡️ 回传 external Id\
+利用external Id 查询 transfer 风险等级
+
+### v1 endpoint 方法1
+####(post_v1_Tr_Rec.go)
+提供用户id进行注册转账-received
+> curl -X POST 'https://api.chainalysis.com/api/kyt/v1/users/{userId}/transfers/received' \
+--header 'Token: <API_KEY>' \
+--header 'Accept: application/json' \
+--header 'Content-Type: application/json' \
+--data '[{"asset": "BTC", "transferReference": "2d9bfc3a47c2c9cfd0170198782979ed327442e5ed1c8a752bced24d490347d4:1H7aVb2RZiBmdbnzazQgVj2hWR3eEZPg6v"}]'\
+> 
+### V1 回传 
+无资料，各栏位回传 null 风险栏位 unknown.
+>回传范例1
+> {\
+    "transferReference": "<transaction_hash>:<output_address>",
+    "asset": "BTC",\
+    "cluster": {\
+    "name": "Coinbase.com",\
+    "category": "exchange"},\
+    "rating": "lowRisk" \
+> }\
+> 回传范例2
+> [{"transferReference":"ac6397c5814932e427ed8f5c21f8e44b66790817be636134dc75103dd5f4937f:0093e5f2A850268c0ca3093c7EA53731296487eB",\
+    "asset":"ETH","\
+    cluster":{"name":null,"category":null},\
+    "rating":"unknown"}]%
+
+### V1: 利用 {user Id] 查询 该用户账号 内  tansfer的所有 received信息 
+###（get_v1_user_R.go）
+example:
+> curl -X GET 'https://api.chainalysis.com/api/kyt/v1/users/hoo_test01/transfers/received' \
+--header 'Token: 8e283fdd013173ce7712d8e5ae9e9d21655274956bddbb40388a4a9229b135a5' \
+--header 'Accept: application/json'
+### 回传
+>{"limit":100,"offset":0,"total":4,\
+"data":[{"asset":"BTC","transferReference":"98239cf08cfd231726743fcff46eba2fa9f3004a9ae5d7fe5b43dde80a7db104:3QQf5i1V2KzXqWaLDeTs2GLqrDRbbxHHHG","amount":0.01021944,"amountUSD":515.67,"timestamp":"2021-12-08T03:55:39Z","\
+rating":"unknown","cluster":null},\
+{"asset":"ETH","transferReference":"ac6397c5814932e427ed8f5c21f8e44b66790817be636134dc75103dd5f4937f:0093e5f2A850268c0ca3093c7EA53731296487eB","amount":0.209443970678721,"amountUSD":929.93,"timestamp":"2021-12-09T03:16:35Z","\ 
+rating":"unknown","cluster":null},\
+{"asset":"BTC","transferReference":"bad68a7d184852f84042cefbf59510ee712327829762257bc4666c07a85526af:3KQKDvLfFZESueHV97jZjzgPxnB35m1nxa","amount":0.03009817,"amountUSD":1520.35,"timestamp":"2021-12-09T03:39:33Z","\
+rating":"lowRisk","cluster":{"name":"SquareUp.com","category":"exchange"}},\
+{"asset":"BTC","transferReference":"e684259e9fc9db382ae1818ce4b1f8333e0d001c53ace1ed322e1a47c8faf5e7:38U93EscZKo3WQgkZFALSJk7sXAjp7kLXn","amount":0.00010255,"amountUSD":5.00,"timestamp":"2021-12-13T02:53:58Z","\
+rating":"unknown","cluster":null}]\
+}% 
+### V2 endpoint  方法 2
+####(post_v2_tra_only_R.go)
+>curl -X POST 'https://api.chainalysis.com/api/kyt/v2/users/{use id}/transfers' \
+--header 'Token: <API_KEY>' \
+--header 'Content-type: application/json' \
+--data '{
+"asset": "BTC",
+"transferReference":"<transaction_hash>:<output_address>",
+"direction":"received"
+}'
+#### 回传：
+回传摘要 ; {external  Id}
+>{
+"updatedAt": null,
+"asset": "BTC",
+"transferReference": "2d9bfc3a47c2c9cfd0170198782979ed327442e5ed1c8a752bced24d490347d4:1H7aVb2RZiBmdbnzazQgVj2hWR3eEZPg6v",
+"tx": null,
+"idx": null,
+"usdAmount": null,
+"assetAmount": null,    
+"timestamp": null,
+"outputAddress": null,
+"externalId": "fc8e053e-8833-344d-b025-40559eafd16f"
+}
+#### 储存 {external Id}
+### V2: 利用 {external Id} 查询 某一笔transfer alerts
+### （get_v2_extId_alerts.go）
+>curl -X GET 'https://api.chainalysis.com/api/kyt/v2/transfers/{external Id}/alerts' \
+--header 'Token: <API_KEY>' \
+--header 'Accept: application/json'
+#### 回传
+alerts 情况：风险等级 所属类别。\
+无资料，回传：null,空 alerts[ ]。
+>{
+"alerts": [
+{
+"alertLevel": "HIGH",\
+"category": "custom address",\
+"service": "Play Royal",\
+"externalId": "906ff226-8b64-11eb-8e52-7b35a3dc1742",\
+"alertAmount": 5000.00,\
+"exposureType": "DIRECT"\
+}]
+}
+###Reference
+GO语言发送json串数组完整代码\
+(参考添加数列(数组)类型[])
+> https://blog.csdn.net/u014605952/article/details/52668989?utm_medium=distribute.pc_relevant.none-task-blog-2~default~baidujs_utm_term~default-1.highlightwordscore&spm=1001.2101.3001.4242.2
+####post golang
+Go语言：发送HTTP请求（GET & POST&NewRequest）\
+学习写post请求，将数据类型转为json 发出。
+> https://blog.csdn.net/weixin_44014995/article/details/113504938?spm=1001.2101.3001.6650.1&utm_medium=distribute.pc_relevant.none-task-blog-2%7Edefault%7EBlogCommendFromBaidu%7Edefault-1.highlightwordscore&depth_1-utm_source=distribute.pc_relevant.none-task-blog-2%7Edefault%7EBlogCommendFromBaidu%7Edefault-1.highlightwordscore
+###get golang
+Go语言实现Get接口请求实例 \
+学习如何写get 接口
+>https://blog.csdn.net/mctlilac/article/details/105668279?utm_medium=distribute.pc_aggpage_search_result.none-task-blog-2~aggregatepage~first_rank_ecpm_v1~rank_v31_ecpm-25-105668279.pc_agg_new_rank&utm_term=go语言开发api接口&spm=1000.2123.3001.4430
+
+post 资料回传转为strust go
+https://so.csdn.net/so/search?q=post%20资料回传转为strust%20go&t=&u=&urw=
+Go学习之ioutil.ReadAll注意事项
+https://blog.csdn.net/xuefeng1207/article/details/87939737
+
+####hoo_test01 withdrawaddress地址
+>{"limit":100,"offset":0,"total":12,"data":[{"asset":"BCH","address":"127qX7DZFy3GQSWKbErATQBtfxKAGxJHSR","cluster":{"name":"Hoo.com","category":"exchange"},"customAddress":null,"chainalysisIdentification":null,"rating":"lowRisk"} ,
+> {"asset":"BTC","address":"1EM4e8eu2S2RQrbS8C6aYnunWpkAwQ8GtG","cluster":null,"customAddress":null,"chainalysisIdentification":{"addressName":"TERRORIST FINANCING: Jaysh Al-Ummah 1EM4e8eu2S2RQrbS8C6aYnunWpkAwQ8GtG","description":"This specific address 1EM4e8eu2S2RQrbS8C6aYnunWpkAwQ8GtG within the cluster has been identified as Jaysh Al-Ummah","categoryName":"terrorist financing"},"rating":"highRisk"},
+> {"asset":"BTC","address":"31h1yc8MnKj49By5tSjApsaLUnEeJ1g4u4","cluster":{"name":"DarkMarket","category":"darknet market"},"customAddress":null,"chainalysisIdentification":null,"rating":"highRisk"},
+> {"asset":"BTC","address":"359ditw3D7xyLneaV4oWunMoDy7dndVzTP","cluster":{"name":"Hoo.com","category":"exchange"},"customAddress":null,"chainalysisIdentification":null,"rating":"lowRisk"},
+> {"asset":"BTC","address":"3EKTUgb7rvfFctsAw9EXLsmaUUcsZ2Wzr3","cluster":null,"customAddress":null,"chainalysisIdentification":null,"rating":"unknown"},
+> {"asset":"BTC","address":"3KQKDvLfFZESueHV97jZjzgPxnB35m1nxa","cluster":{"name":"Hoo.com","category":"exchange"},"customAddress":null,"chainalysisIdentification":null,"rating":"lowRisk"},
+> {"asset":"BTC","address":"3PzAKvVGqULjBr41WcqMWkDmrs6QWt79Za","cluster":{"name":"Hoo.com","category":"exchange"},"customAddress":null,"chainalysisIdentification":null,"rating":"lowRisk"},
+> {"asset":"DAI","address":"18a465f37eef8881e2a4262e6dde4dbb827f9154","cluster":null,"customAddress":null,"chainalysisIdentification":null,"rating":"unknown"},
+> {"asset":"ETH","address":"18a465f37eef8881e2a4262e6dde4dbb827f9154","cluster":{"name":"ETHUSDTBTC.com","category":"scam"},"customAddress":null,"chainalysisIdentification":null,"rating":"lowRisk"},
+> {"asset":"LTC","address":"LeuzWnqX9AsDjNwrkFq8V4u3uHeHd7SWTR","cluster":{"name":"Hoo.com","category":"exchange"},"customAddress":null,"chainalysisIdentification":null,"rating":"lowRisk"},
+> {"asset":"LTC","address":"LRSgpmsHjCfLpsfxtPfUM1oxj5q7TXw6wn","cluster":{"name":"Hoo.com","category":"exchange"},"customAddress":null,"chainalysisIdentification":null,"rating":"lowRisk"},
+> {"asset":"USDT_ETH","address":"18a465f37eef8881e2a4262e6dde4dbb827f9154","cluster":{"name":"ETHUSDTBTC.com","category":"scam"},"customAddress":null,"chainalysisIdentification":null,"rating":"lowRisk"}]}% 
